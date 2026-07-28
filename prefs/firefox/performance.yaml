@@ -6,6 +6,36 @@
   value: 3
   condition: "defined(XP_MACOSX)"
 
+# Keep automatic tab unloading enabled on macOS. Zen manages tabs across
+# workspaces, and its TabUnloader patch only considers tabs that are safe to
+# discard, so this releases renderer memory without weakening isolation or
+# unloading the selected tab.
+- name: browser.tabs.unloadOnLowMemory
+  value: true
+  condition: "defined(XP_MACOSX)"
+
+# Firefox waits ten minutes by default before a background tab is eligible for
+# low-memory unloading. Five minutes keeps recently used tabs responsive while
+# allowing memory pressure to be relieved much sooner on laptops with modest
+# unified memory.
+- name: browser.tabs.min_inactive_duration_before_unload
+  value: 300000
+  condition: "defined(XP_MACOSX)"
+
+# Bound caches whose automatic limits scale with installed RAM. The limits are
+# intentionally macOS-only and remain user-overridable through about:config.
+# This trades a small number of cache hits for a predictable reduction in RAM
+# use, without changing content-process, security, or release configuration.
+- name: browser.cache.memory.capacity
+  value: 131072 # KiB (128 MiB)
+  condition: "defined(XP_MACOSX)"
+
+- name: image.mem.surfacecache.max_size_kb
+  value: 524288 # KiB (512 MiB)
+  condition: "defined(XP_MACOSX)"
+
+- name: image.mem.surfacecache.min_expiration_ms
+  condition: "defined(XP_MACOSX)"
 - name: network.predictor.enable-hover-on-ssl
   value: true
 
