@@ -1,0 +1,80 @@
+name: Build and release macOS fork
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag to create (for example, v153.0-zen-light.1)"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark the GitHub release as a pre-release"
+        required: true
+        default: true
+        type: boolean
+
+# The workflow only needs permission to create the tag and GitHub Release in
+# this repository. It deliberately does not use the official signing secrets.
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build unsigned macOS (${{ matrix.arch }})
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            rust_target: aarch64-apple-darwin
+          - arch: x86_64
+            rust_target: x86_64-apple-darwin
+    env:
+      SURFER_PLATFORM: darwin
+      SURFER_COMPAT: ${{ matrix.arch }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install macOS build dependencies
+        run: |
+          brew install gnu-tar sccache
+          rustup target add "${{ matrix.rust_target }}"
+          echo "/opt/homebrew/opt/gnu-tar/libexec/gnubin" >> "$GITHUB_PATH"
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Download Firefox, apply Zen patches, and bootstrap
+        run: npm run init
+
+      - name: Update en-US language packs
+        run: python3 ./scripts/update_en_US_packs.py
+
+      # A normal optimized build is intentional here. The official release
+      # workflow adds PGO and Apple signing/notarization, which require private
+      # credentials and are not suitable for a public fork by default.
+      - name: Build Zen
+        run: npm run build
+
+      - name: Package an unsigned DMG
+        run: |
+          export ZEN_RELEASE=1
+          npm run package
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: ${{ inputs.tag }}
+          prerelease: ${{ inputs.prerelease }}
+          generate_release_notes: true
+          files: dist/*.dmg
